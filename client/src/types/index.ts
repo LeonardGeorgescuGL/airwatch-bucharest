@@ -2,8 +2,11 @@ export type UserType = 'visitor' | 'community-member' | null;
 
 export interface User {
   type: UserType;
+  id?: string;
   name?: string;
   email?: string;
+  points?: number;
+  neighborhood?: string;
   authenticated: boolean;
 }
 

@@ -62,7 +62,7 @@ export function MapDashboard({ user, onViewChange, onLogout }: MapDashboardProps
               <Wind className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl text-white">AeroWatch Bucharest</h1>
+            <h1 className="text-xl text-white">AirWatch Bucharest</h1>
               <p className="text-sm text-slate-400">Live Air Quality Monitor</p>
             </div>
           </div>

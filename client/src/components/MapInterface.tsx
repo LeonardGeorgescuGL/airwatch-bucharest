@@ -1,28 +1,46 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Layers, Filter, Menu, LogOut, Clock, AlertTriangle, ChevronRight, X } from 'lucide-react';
+import { MapPin, Filter, Menu, LogOut, Clock, AlertTriangle, ChevronRight, X, Trophy } from 'lucide-react';
 import type { User, Sensor } from '../types';
 import { generateMockSensors, AQI_COLORS, AQI_LABELS } from '../utils/mockData';
 import { MapView } from './MapView';
 
 interface MapInterfaceProps {
   user: User;
-  onNavigate: (view: 'map' | 'history' | 'alerts') => void;
+  onNavigate: (view: 'map' | 'history' | 'alerts' | 'leaderboard') => void;
   onLogout: () => void;
 }
 
 export function MapInterface({ user, onNavigate, onLogout }: MapInterfaceProps) {
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
-  const [showClustering, setShowClustering] = useState(true);
   const [useRiskZones, setUseRiskZones] = useState(false); // New state for risk zones
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showSidebar, setShowSidebar] = useState(true);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
+  const fetchSensors = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/air-quality/sensors');
+      if (response.ok) {
+        const data = await response.json();
+        setSensors(data);
+      } else {
+        throw new Error('Backend returned error');
+      }
+    } catch (error) {
+      console.error('Failed to fetch sensors from backend, falling back to mock data:', error);
+      setSensors(generateMockSensors());
+    }
+  };
+
   useEffect(() => {
-    setSensors(generateMockSensors());
+    fetchSensors();
+    // Poll every 5 minutes for new data
+    const intervalId = setInterval(fetchSensors, 5 * 60 * 1000);
+    return () => clearInterval(intervalId);
   }, []);
+
 
   const filteredSensors = useMemo(() => {
     if (filterCategory === 'all') return sensors;
@@ -53,32 +71,42 @@ export function MapInterface({ user, onNavigate, onLogout }: MapInterfaceProps) 
   return (
     <div className="h-screen flex flex-col bg-slate-950">
       {/* Top Navigation Bar */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between z-20">
-        <div className="flex items-center gap-4">
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-700 px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-center justify-between z-40 gap-3 md:gap-0">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h1 className="text-xl md:text-2xl text-white">
+              AirWatch <span className="text-cyan-400">București</span>
+            </h1>
+          </div>
+          {/* Pe mobil, butonul de iesire poate fi aici sus */}
           <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="text-slate-400 hover:text-white transition-colors"
+            onClick={onLogout}
+            className="md:hidden flex items-center gap-2 text-red-400 px-2 py-1 rounded-lg"
           >
-            <Menu className="w-6 h-6" />
+            <LogOut className="w-5 h-5" />
           </button>
-          <h1 className="text-2xl text-white">
-            AirWatch <span className="text-cyan-400">București</span>
-          </h1>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="bg-slate-800 rounded-lg px-4 py-2 border border-slate-700">
-            <span className="text-slate-400 text-sm">AQI mediu: </span>
+        <div className="flex items-center justify-between w-full md:w-auto gap-4">
+          <div className="bg-slate-800 rounded-lg px-3 py-1.5 md:px-4 md:py-2 border border-slate-700 text-sm md:text-base">
+            <span className="text-slate-400">AQI mediu: </span>
             <span className="text-white">{averageAQI}</span>
           </div>
           {user.name && (
-            <div className="text-slate-300">
-              Bine ai venit, <span className="text-purple-400">{user.name}</span>
+            <div className="text-slate-300 text-sm md:text-base truncate max-w-[150px] md:max-w-none">
+              <span className="hidden md:inline">Bine ai venit, </span>
+              <span className="text-purple-400">{user.name}</span>
             </div>
           )}
           <button
             onClick={onLogout}
-            className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 px-4 py-2 rounded-lg transition-colors"
+            className="hidden md:flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 px-4 py-2 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Ieșire</span>
@@ -94,7 +122,7 @@ export function MapInterface({ user, onNavigate, onLogout }: MapInterfaceProps) 
               initial={{ x: -320 }}
               animate={{ x: 0 }}
               exit={{ x: -320 }}
-              className="w-80 bg-slate-900 border-r border-slate-700 flex flex-col z-10 overflow-hidden"
+              className="absolute md:relative w-80 h-full bg-slate-900 border-r border-slate-700 flex flex-col z-30 shadow-2xl overflow-hidden"
             >
               {/* Navigation */}
               <div className="p-4 border-b border-slate-700 flex-shrink-0">
@@ -122,6 +150,13 @@ export function MapInterface({ user, onNavigate, onLogout }: MapInterfaceProps) 
                       <span>Alerte Comunitate</span>
                     </button>
                   )}
+                  <button
+                    onClick={() => onNavigate('leaderboard')}
+                    className="w-full flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/20 hover:bg-yellow-500/20 text-yellow-500 hover:text-yellow-400 px-4 py-3 rounded-xl transition-colors"
+                  >
+                    <Trophy className="w-5 h-5" />
+                    <span>Top Implicare</span>
+                  </button>
                 </nav>
               </div>
 
@@ -316,73 +351,93 @@ export function MapInterface({ user, onNavigate, onLogout }: MapInterfaceProps) 
         <div className="flex-1 relative">
           <MapView
             sensors={filteredSensors}
-            showClustering={showClustering}
+            showClustering={true}
             onSensorClick={setSelectedSensor}
             useRiskZones={useRiskZones}
           />
 
           {/* Sensor Detail Panel */}
           <AnimatePresence>
-            {selectedSensor && (
+          {selectedSensor && (
               <motion.div
                 initial={{ x: 400 }}
                 animate={{ x: 0 }}
                 exit={{ x: 400 }}
                 className="absolute top-4 right-4 w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-10"
               >
-                <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-6 relative">
+                <div
+                  className="p-6 relative"
+                  style={{ background: `linear-gradient(135deg, ${AQI_COLORS[selectedSensor.category]}22, #0f172a)` }}
+                >
                   <button
                     onClick={() => setSelectedSensor(null)}
-                    className="absolute top-4 right-4 text-white/80 hover:text-white"
+                    className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
-                  <div className="text-white text-sm mb-2">Senzor {selectedSensor.id}</div>
-                  <div className="text-4xl text-white mb-2">{selectedSensor.aqi}</div>
-                  <div className="text-cyan-100">
-                    {AQI_LABELS[selectedSensor.category]}
+
+                  <div className="text-slate-400 text-xs mb-1 font-mono">{selectedSensor.id}</div>
+                  <div className="text-white text-lg font-bold mb-1">
+                    {selectedSensor.id in ({} as any) ? selectedSensor.id : selectedSensor.id}
+                  </div>
+                  <div className="text-slate-400 text-sm mb-4">{selectedSensor.dataSource} · Sursa date</div>
+
+                  <div className="flex items-end gap-4">
+                    <div>
+                      <div className="text-5xl font-bold" style={{ color: AQI_COLORS[selectedSensor.category] }}>
+                        {selectedSensor.aqi}
+                      </div>
+                      <div className="text-sm mt-1" style={{ color: AQI_COLORS[selectedSensor.category] }}>
+                        {AQI_LABELS[selectedSensor.category]}
+                      </div>
+                    </div>
+                    <div className="text-slate-500 text-xs pb-1">AQI</div>
                   </div>
                 </div>
 
-                <div className="p-6 space-y-4">
+                <div className="p-5 space-y-4">
+                  {/* Poluanti principali */}
                   <div>
-                    <div className="text-slate-400 text-sm mb-1">Sursă date</div>
-                    <div className="text-white">{selectedSensor.dataSource}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-slate-400 text-sm mb-3">Indicatori poluanți</div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">PM2.5</span>
-                        <span className="text-white">{selectedSensor.pm25} μg/m³</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">PM10</span>
-                        <span className="text-white">{selectedSensor.pm10} μg/m³</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">NO₂</span>
-                        <span className="text-white">{selectedSensor.no2} ppb</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">O₃</span>
-                        <span className="text-white">{selectedSensor.o3} ppb</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">CO</span>
-                        <span className="text-white">{selectedSensor.co} ppm</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-300">SO₂</span>
-                        <span className="text-white">{selectedSensor.so2} ppb</span>
-                      </div>
+                    <div className="text-slate-400 text-xs uppercase tracking-wider mb-3">Poluanți măsurați</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'PM2.5', value: selectedSensor.pm25, unit: 'μg/m³', danger: 35 },
+                        { label: 'PM10',  value: selectedSensor.pm10, unit: 'μg/m³', danger: 50 },
+                        { label: 'NO₂',  value: selectedSensor.no2,  unit: 'μg/m³', danger: 40 },
+                        { label: 'O₃',   value: selectedSensor.o3,   unit: 'μg/m³', danger: 100 },
+                        { label: 'CO',   value: selectedSensor.co,   unit: 'mg/m³', danger: 10 },
+                        { label: 'SO₂',  value: selectedSensor.so2,  unit: 'μg/m³', danger: 20 },
+                      ].map(({ label, value, unit, danger }) => {
+                        const val = value ?? 0;
+                        const pct = Math.min(100, (val / danger) * 100);
+                        const barColor = pct < 60 ? '#10b981' : pct < 85 ? '#f59e0b' : '#ef4444';
+                        return (
+                          <div key={label} className="bg-slate-800/60 rounded-lg p-3">
+                            <div className="flex justify-between items-baseline mb-1.5">
+                              <span className="text-slate-400 text-xs">{label}</span>
+                              <span className="text-white font-semibold text-sm">
+                                {val > 0 ? val.toFixed(1) : '—'}
+                              </span>
+                            </div>
+                            <div className="text-slate-500 text-xs mb-2">{unit}</div>
+                            <div className="w-full bg-slate-700 rounded-full h-1">
+                              <div
+                                className="h-1 rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: barColor }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-700">
-                    <div className="text-slate-400 text-sm mb-1">Cluster</div>
-                    <div className="text-white">Zona {(selectedSensor.cluster || 0) + 1}</div>
+                  {/* Coordonate GPS */}
+                  <div className="pt-3 border-t border-slate-700/50">
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>📍 {selectedSensor.lat.toFixed(4)}°N, {selectedSensor.lng.toFixed(4)}°E</span>
+                      <span>Cluster K-Means: {(selectedSensor.riskCluster ?? 0) + 1}</span>
+                    </div>
                   </div>
                 </div>
               </motion.div>

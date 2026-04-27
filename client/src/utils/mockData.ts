@@ -36,7 +36,7 @@ function getHealthRiskZone(aqi: number): HealthRiskZone {
 function getRiskCluster(sensors: Sensor[]): void {
   sensors.forEach(sensor => {
     const avgAQI = sensor.aqi;
-    
+
     // Assign cluster based on health risk zone
     if (sensor.healthRiskZone === 'moderate-risk') {
       sensor.riskCluster = 0;
@@ -147,44 +147,44 @@ export function generateProphetPredictions(
   }
 
   const predictions: any[] = [];
-  
+
   // Extract values for the selected pollutant
   const values = historicalData.map(d => d.aqi);
   const n = values.length;
-  
+
   // 1. Calculate trend using linear regression
   const xValues = Array.from({ length: n }, (_, i) => i);
   const yValues = values;
-  
+
   const sumX = xValues.reduce((a, b) => a + b, 0);
   const sumY = yValues.reduce((a, b) => a + b, 0);
   const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
   const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
-  
+
   const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
   const intercept = (sumY - slope * sumX) / n;
-  
+
   // 2. Calculate weekly seasonality
   const weeklyPattern: number[] = Array(7).fill(0);
   const weeklyCount: number[] = Array(7).fill(0);
-  
+
   historicalData.forEach((d, i) => {
     const date = new Date(d.date);
     const dayOfWeek = date.getDay();
     const trendValue = slope * i + intercept;
     const detrended = d.aqi - trendValue;
-    
+
     weeklyPattern[dayOfWeek] += detrended;
     weeklyCount[dayOfWeek]++;
   });
-  
+
   // Average the weekly pattern
   for (let i = 0; i < 7; i++) {
     if (weeklyCount[i] > 0) {
       weeklyPattern[i] /= weeklyCount[i];
     }
   }
-  
+
   // 3. Calculate noise/uncertainty level
   const residuals = historicalData.map((d, i) => {
     const date = new Date(d.date);
@@ -194,32 +194,32 @@ export function generateProphetPredictions(
     const predicted = trendValue + seasonalValue;
     return Math.abs(d.aqi - predicted);
   });
-  
+
   const avgResidual = residuals.reduce((a, b) => a + b, 0) / residuals.length;
   const uncertainty = avgResidual * 1.5; // Increase uncertainty for future predictions
-  
+
   // 4. Generate predictions
   const lastDate = new Date(historicalData[historicalData.length - 1].date);
-  
+
   for (let i = 1; i <= daysToPredict; i++) {
     const futureDate = new Date(lastDate);
     futureDate.setDate(futureDate.getDate() + i);
-    
+
     const dayOfWeek = futureDate.getDay();
     const tIndex = n + i - 1;
-    
+
     // Prophet's additive model: y(t) = trend(t) + seasonality(t)
     const trendValue = slope * tIndex + intercept;
     const seasonalValue = weeklyPattern[dayOfWeek];
-    
+
     // Add some realistic variation
     const noise = (Math.random() - 0.5) * avgResidual * 0.5;
     const predictedAQI = Math.max(0, Math.round(trendValue + seasonalValue + noise));
-    
+
     // Calculate confidence intervals (Prophet uses MCMC, we use simplified approach)
     const lowerBound = Math.max(0, Math.round(predictedAQI - uncertainty));
     const upperBound = Math.round(predictedAQI + uncertainty);
-    
+
     // Generate correlated pollutant predictions
     const pm25 = Math.round((predictedAQI / 3) + Math.random() * 15);
     const pm10 = Math.round(pm25 * 1.5 + Math.random() * 10);
@@ -227,7 +227,7 @@ export function generateProphetPredictions(
     const o3 = Math.round(35 + Math.random() * 50);
     const co = Math.round(0.4 + Math.random() * 1.2 * 10) / 10;
     const so2 = Math.round(4 + Math.random() * 15);
-    
+
     predictions.push({
       date: futureDate.toISOString().split('T')[0],
       timestamp: futureDate.getTime(),
@@ -245,14 +245,14 @@ export function generateProphetPredictions(
       confidence: Math.max(0.5, 1 - (i / daysToPredict) * 0.3), // Decreasing confidence
     });
   }
-  
+
   return predictions;
 }
 
 export function generateHistoricalData(sensorId: string, days: number = 30) {
   const data = [];
-  // TODAY is Feb 7, 2026
-  const today = new Date('2026-02-07');
+  // Use current date for predictions
+  const today = new Date();
 
   for (let i = days; i >= 0; i--) {
     const date = new Date(today);

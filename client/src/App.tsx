@@ -1,18 +1,20 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { MapInterface } from './components/MapInterface';
 import { HistoricalDataInterface } from './components/HistoricalDataInterface';
 import { CommunityAlertInterface } from './components/CommunityAlertInterface';
+import { LeaderboardInterface } from './components/LeaderboardInterface';
 import { LoginModal } from './components/LoginModal';
 import { IntroAnimation } from './components/IntroAnimation';
 import type { UserType, User } from './types';
+import { api } from './api/api';
 
 function App() {
   const [showIntro, setShowIntro] = useState(true);
-  const [currentView, setCurrentView] = useState<'landing' | 'map' | 'history' | 'alerts'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'map' | 'history' | 'alerts' | 'leaderboard'>('landing');
   const [user, setUser] = useState<User>({ type: null, authenticated: false });
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [pendingView, setPendingView] = useState<'map' | 'history' | 'alerts' | null>(null);
+  const [pendingView, setPendingView] = useState<'map' | 'history' | 'alerts' | 'leaderboard' | null>(null);
 
   const handleUserTypeSelect = (type: UserType) => {
     if (type === 'community-member') {
@@ -23,10 +25,10 @@ function App() {
     }
   };
 
-  const handleLogin = (name: string, email: string, password: string) => {
-    setUser({ type: 'community-member', name, email, authenticated: true });
+  // Primeste datele complete de la backend dupa login reusit
+  const handleLogin = (id: string, name: string, email: string, points: number, neighborhood: string) => {
+    setUser({ type: 'community-member', id, name, email, points, neighborhood, authenticated: true });
     setShowLoginModal(false);
-    // If there was a pending navigation request (e.g. user tried to access alerts), honor it
     if (pendingView) {
       setCurrentView(pendingView);
       setPendingView(null);
@@ -36,19 +38,18 @@ function App() {
   };
 
   const handleLogout = () => {
+    api.logout().catch(() => {}); // Invalideaza sesiunea pe backend
     setUser({ type: null, authenticated: false });
     setCurrentView('landing');
     setPendingView(null);
   };
 
-  const handleNavigation = (view: 'map' | 'history' | 'alerts') => {
-    // If user requests community alerts but isn't a community-member, prompt login
+  const handleNavigation = (view: 'map' | 'history' | 'alerts' | 'leaderboard') => {
     if (view === 'alerts' && user.type !== 'community-member') {
       setPendingView(view);
       setShowLoginModal(true);
       return;
     }
-
     setCurrentView(view);
   };
 
@@ -82,6 +83,14 @@ function App() {
 
           {currentView === 'alerts' && user.authenticated && user.type === 'community-member' && (
             <CommunityAlertInterface 
+              user={user} 
+              onNavigate={handleNavigation}
+              onLogout={handleLogout}
+            />
+          )}
+
+          {currentView === 'leaderboard' && user.authenticated && (
+            <LeaderboardInterface 
               user={user} 
               onNavigate={handleNavigation}
               onLogout={handleLogout}

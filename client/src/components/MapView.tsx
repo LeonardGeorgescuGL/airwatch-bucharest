@@ -6,14 +6,105 @@ interface MapViewProps {
   sensors: Sensor[];
   showClustering: boolean;
   onSensorClick: (sensor: Sensor) => void;
-  useRiskZones?: boolean; // New prop to toggle between AQI and Risk zones
+  useRiskZones?: boolean;
 }
 
-// Leaflet types
 declare global {
-  interface Window {
-    L: any;
+  interface Window { L: any; }
+}
+
+// ── Mapare ID senzor → nume prietenos ──────────────────────────────────────
+const SENSOR_NAMES: Record<string, string> = {
+  'S-CV-01': 'Piața Unirii',
+  'S-CV-02': 'Calea Victoriei',
+  'S-CV-03': 'Piața Victoriei',
+  'S-CV-04': 'Piața Alba Iulia',
+  'S-CV-05': 'Bd. Magheru',
+  'S-CV-06': 'Piața Romană',
+  'S-CV-07': 'Tineretului',
+  'S-CV-08': 'Piața Sudului',
+  'S-NR-01': 'Băneasa',
+  'S-NR-02': 'Herăstrău',
+  'S-NR-03': 'Floreasca',
+  'S-NR-04': 'Aeroport Băneasa',
+  'S-NR-05': 'Dorobanți',
+  'S-NR-06': 'Pipera',
+  'S-NR-07': 'Aviatorilor',
+  'S-SD-01': 'Berceni',
+  'S-SD-02': 'Piața Progresul',
+  'S-SD-03': 'Giurgiului',
+  'S-SD-04': 'Rahova',
+  'S-SD-05': 'Olteniței',
+  'S-SD-06': 'Brâncoveanu',
+  'S-SD-07': 'Jilava (limită)',
+  'S-ES-01': 'Pantelimon',
+  'S-ES-02': 'Colentina',
+  'S-ES-03': 'Dristor',
+  'S-ES-04': 'Fundeni',
+  'S-ES-05': 'Titan Est',
+  'S-ES-06': 'Andronache',
+  'S-VS-01': 'Militari',
+  'S-VS-02': 'Drumul Taberei',
+  'S-VS-03': 'Crângași',
+  'S-VS-04': 'Gorjului',
+  'S-VS-05': 'Lujerului',
+  'S-VS-06': 'Politehnica',
+  'S-VS-07': 'Giulești',
+  'S-SE-01': 'Titan',
+  'S-SE-02': 'Dristor Nord',
+  'S-SE-03': 'Râmnicu Sărat',
+  'S-SE-04': 'Republica',
+  'S-SE-05': 'Costin Georgian',
+  'S-SE-06': 'Ilioara',
+};
+
+// Zona urbana pentru fiecare prefix de senzor
+const ZONE_NAMES: Record<string, string> = {
+  'S-CV': 'Centru',
+  'S-NR': 'Nord – Băneasa',
+  'S-SD': 'Sud – Berceni',
+  'S-ES': 'Est – Pantelimon',
+  'S-VS': 'Vest – Militari',
+  'S-SE': 'Sud-Est – Titan',
+};
+
+function getSensorName(id: string): string {
+  return SENSOR_NAMES[id] ?? id;
+}
+
+function getZoneName(id: string): string {
+  const prefix = id.substring(0, 4);
+  return ZONE_NAMES[prefix] ?? 'Zona necunoscută';
+}
+
+// ── AQI real calculat din PM2.5 (formula EPA Breakpoints) ──────────────────
+// https://www.airnow.gov/publications/air-quality-index/technical-assistance-document-september-2018/
+function pm25ToAqi(pm25: number): number {
+  if (pm25 < 0) return 0;
+  const bp = [
+    [0.0, 12.0, 0, 50],
+    [12.1, 35.4, 51, 100],
+    [35.5, 55.4, 101, 150],
+    [55.5, 150.4, 151, 200],
+    [150.5, 250.4, 201, 300],
+    [250.5, 350.4, 301, 400],
+    [350.5, 500.4, 401, 500],
+  ];
+  for (const [cLow, cHigh, iLow, iHigh] of bp) {
+    if (pm25 >= cLow && pm25 <= cHigh) {
+      return Math.round(((iHigh - iLow) / (cHigh - cLow)) * (pm25 - cLow) + iLow);
+    }
   }
+  return 500;
+}
+
+function aqiCategory(aqi: number): string {
+  if (aqi <= 50) return 'good';
+  if (aqi <= 100) return 'moderate';
+  if (aqi <= 150) return 'sensitive';
+  if (aqi <= 200) return 'unhealthy';
+  if (aqi <= 300) return 'very-unhealthy';
+  return 'hazardous';
 }
 
 export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }: MapViewProps) {
@@ -23,9 +114,7 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
   const clusterLayersRef = useRef<any[]>([]);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // Initialize Leaflet
   useEffect(() => {
-    // Add Leaflet CSS
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -33,55 +122,37 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-
-    // Add Leaflet JS
     if (!window.L) {
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => {
-        setIsMapReady(true);
-      };
+      script.onload = () => setIsMapReady(true);
       document.body.appendChild(script);
     } else {
       setIsMapReady(true);
     }
   }, []);
 
-  // Initialize map
   useEffect(() => {
     if (!isMapReady || !mapRef.current || leafletMapRef.current) return;
-
     const L = window.L;
-
-    // Define Bucharest and Ilfov bounds
     const bucharestBounds = L.latLngBounds(
-      L.latLng(44.25, 25.90),  // Southwest corner
-      L.latLng(44.65, 26.35)   // Northeast corner
+      L.latLng(44.25, 25.90),
+      L.latLng(44.65, 26.35)
     );
-
-    // Create map centered on Bucharest
     const map = L.map(mapRef.current, {
       center: [44.4268, 26.1025],
       zoom: 12,
-      zoomControl: true,
       maxBounds: bucharestBounds,
       maxBoundsViscosity: 1.0,
       minZoom: 11,
-      maxZoom: 16,
+      maxZoom: 17,
     });
-
-    // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
+      attribution: '© <a href="https://www.openstreetmap.org">OpenStreetMap</a>',
       maxZoom: 19,
-      bounds: bucharestBounds,
     }).addTo(map);
-
-    // Fit to bounds on initialization
     map.fitBounds(bucharestBounds);
-
     leafletMapRef.current = map;
-
     return () => {
       if (leafletMapRef.current) {
         leafletMapRef.current.remove();
@@ -90,252 +161,223 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
     };
   }, [isMapReady]);
 
-  // Update sensors on map
+  // ── Randare senzori ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!leafletMapRef.current || !isMapReady) return;
-
     const L = window.L;
     const map = leafletMapRef.current;
 
-    // Clear existing markers
-    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 
-    // Add sensor markers
     sensors.forEach(sensor => {
-      const color = useRiskZones ? RISK_ZONE_COLORS[sensor.healthRiskZone] : AQI_COLORS[sensor.category];
-      
-      // Create custom icon with AQI color
+      // Calcul AQI real din PM2.5 daca avem valoare
+      const realAqi = sensor.pm25 && sensor.pm25 > 0
+        ? pm25ToAqi(sensor.pm25)
+        : sensor.aqi;
+      const realCategory = aqiCategory(realAqi);
+
+      const color = useRiskZones
+        ? (RISK_ZONE_COLORS[sensor.healthRiskZone] ?? '#64748b')
+        : (AQI_COLORS[realCategory] ?? AQI_COLORS['moderate']);
+
+      const sensorName = getSensorName(sensor.id);
+      const zoneName = getZoneName(sensor.id);
+
+      // Marime icon proportionala cu AQI (mai poluat = cerc mai mare)
+      const size = realAqi <= 50 ? 18 : realAqi <= 100 ? 22 : realAqi <= 150 ? 26 : 30;
+
       const icon = L.divIcon({
         className: 'custom-marker',
         html: `
-          <div style="position: relative;">
+          <div style="position:relative;width:${size}px;height:${size}px;">
             <div style="
-              width: 24px;
-              height: 24px;
-              background: ${color};
-              border: 3px solid white;
-              border-radius: 50%;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-              cursor: pointer;
+              width:${size}px;height:${size}px;
+              background:${color};
+              border:2.5px solid rgba(255,255,255,0.9);
+              border-radius:50%;
+              box-shadow:0 2px 10px rgba(0,0,0,0.4);
+              cursor:pointer;
             "></div>
             <div style="
-              position: absolute;
-              top: -8px;
-              left: -8px;
-              width: 40px;
-              height: 40px;
-              background: ${color}40;
-              border-radius: 50%;
-              animation: pulse 2s infinite;
+              position:absolute;
+              top:-${size/2}px;left:-${size/2}px;
+              width:${size*2}px;height:${size*2}px;
+              background:${color}30;
+              border-radius:50%;
+              animation:pulse 2.5s infinite;
             "></div>
           </div>
         `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
       });
+
+      // Tooltip hover: date complete
+      const tooltipHtml = `
+        <div style="min-width:180px;font-family:system-ui,sans-serif;">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#e2e8f0;">
+            📍 ${sensorName}
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">${zoneName} · ${sensor.dataSource}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <div style="background:${color};border-radius:4px;padding:2px 8px;font-weight:700;color:#fff;font-size:13px;">
+              AQI ${realAqi}
+            </div>
+            <span style="color:#cbd5e1;font-size:12px;">${AQI_LABELS[realCategory] ?? realCategory}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;">
+            <span style="color:#94a3b8;">PM2.5</span><span style="color:#e2e8f0;font-weight:600;">${sensor.pm25 ? sensor.pm25.toFixed(1) : '—'} μg/m³</span>
+            <span style="color:#94a3b8;">PM10</span><span style="color:#e2e8f0;font-weight:600;">${sensor.pm10 ? sensor.pm10.toFixed(1) : '—'} μg/m³</span>
+            <span style="color:#94a3b8;">NO₂</span><span style="color:#e2e8f0;font-weight:600;">${sensor.no2 ? sensor.no2.toFixed(1) : '—'} μg/m³</span>
+            <span style="color:#94a3b8;">O₃</span><span style="color:#e2e8f0;font-weight:600;">${sensor.o3 ? sensor.o3.toFixed(1) : '—'} μg/m³</span>
+            <span style="color:#94a3b8;">CO</span><span style="color:#e2e8f0;font-weight:600;">${sensor.co ? sensor.co.toFixed(2) : '—'} mg/m³</span>
+            <span style="color:#94a3b8;">SO₂</span><span style="color:#e2e8f0;font-weight:600;">${sensor.so2 ? sensor.so2.toFixed(1) : '—'} μg/m³</span>
+          </div>
+        </div>
+      `;
 
       const marker = L.marker([sensor.lat, sensor.lng], { icon })
         .addTo(map)
-        .on('click', () => onSensorClick(sensor));
+        .on('click', () => onSensorClick({ ...sensor, aqi: realAqi, category: realCategory }));
 
-      // Add tooltip
-      marker.bindTooltip(
-        `<div style="text-align: center;">
-          <strong>AQI: ${sensor.aqi}</strong><br/>
-          ${useRiskZones ? RISK_ZONE_LABELS[sensor.healthRiskZone] : AQI_LABELS[sensor.category]}<br/>
-          <small>${sensor.dataSource}</small>
-        </div>`,
-        { direction: 'top', offset: [0, -12] }
-      );
+      marker.bindTooltip(tooltipHtml, {
+        direction: 'top',
+        offset: [0, -(size / 2 + 4)],
+        opacity: 1,
+      });
 
       markersRef.current.push(marker);
     });
-
   }, [sensors, isMapReady, onSensorClick, useRiskZones]);
 
-  // Update clustering visualization
+  // ── Clustere / Zone ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!leafletMapRef.current || !isMapReady || !showClustering) {
-      // Remove cluster layers if clustering is off
-      clusterLayersRef.current.forEach(layer => layer.remove());
-      clusterLayersRef.current = [];
-      return;
-    }
-
+    if (!leafletMapRef.current || !isMapReady) return;
     const L = window.L;
     const map = leafletMapRef.current;
 
-    // Clear existing cluster layers
-    clusterLayersRef.current.forEach(layer => layer.remove());
+    clusterLayersRef.current.forEach(l => l.remove());
     clusterLayersRef.current = [];
 
+    if (!showClustering) return;
+
     if (useRiskZones) {
-      // Use risk-based clustering (3 zones)
+      // K-Means 3 zone de risc sanitar
       const riskClusters = new Map<number, Sensor[]>();
-      sensors.forEach(sensor => {
-        const riskCluster = sensor.riskCluster || 0;
-        if (!riskClusters.has(riskCluster)) {
-          riskClusters.set(riskCluster, []);
-        }
-        riskClusters.get(riskCluster)!.push(sensor);
+      sensors.forEach(s => {
+        const rc = s.riskCluster ?? 0;
+        if (!riskClusters.has(rc)) riskClusters.set(rc, []);
+        riskClusters.get(rc)!.push(s);
       });
 
-      // Draw risk zone cluster circles
       riskClusters.forEach((clusterSensors, riskClusterId) => {
-        if (clusterSensors.length === 0) return;
-
-        // Calculate cluster center
+        if (!clusterSensors.length) return;
         const centerLat = clusterSensors.reduce((sum, s) => sum + s.lat, 0) / clusterSensors.length;
         const centerLng = clusterSensors.reduce((sum, s) => sum + s.lng, 0) / clusterSensors.length;
 
-        // Calculate average AQI for cluster
-        const avgAQI = Math.round(clusterSensors.reduce((sum, s) => sum + s.aqi, 0) / clusterSensors.length);
-        const healthRiskZone = clusterSensors[0].healthRiskZone;
-        const color = RISK_ZONE_COLORS[healthRiskZone];
+        const avgPm25 = clusterSensors.reduce((sum, s) => sum + (s.pm25 ?? 0), 0) / clusterSensors.length;
+        const avgAqi = clusterSensors.reduce((sum, s) => sum + (s.aqi ?? 0), 0) / clusterSensors.length;
+        const healthRiskZone = clusterSensors[0].healthRiskZone ?? 'moderate-risk';
+        const color = RISK_ZONE_COLORS[healthRiskZone] ?? '#64748b';
 
-        // Draw cluster circle - VERY LARGE to cover entire urban areas
         const circle = L.circle([centerLat, centerLng], {
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.25,
-          radius: 7500, // Increased from 4500 to 7500 meters for maximum urban coverage
-          weight: 3,
+          color, fillColor: color, fillOpacity: 0.18, radius: 7000, weight: 2.5,
         }).addTo(map);
 
-        // Add cluster label
         const labelIcon = L.divIcon({
           className: 'cluster-label',
           html: `
             <div style="
-              background: ${color}ee;
-              color: white;
-              padding: 8px 16px;
-              border-radius: 24px;
-              font-weight: 700;
-              font-size: 14px;
-              white-space: nowrap;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-              border: 2px solid white;
+              background:${color}ee;color:#fff;
+              padding:8px 14px;border-radius:20px;
+              font-weight:700;font-size:13px;
+              white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.4);
+              border:2px solid rgba(255,255,255,0.8);
             ">
-              ${RISK_ZONE_LABELS[healthRiskZone]}<br/>
-              <small style="font-weight: 500; opacity: 0.9;">AQI mediu: ${avgAQI}</small>
-            </div>
-          `,
-          iconSize: [180, 50],
-          iconAnchor: [90, 25],
+              ${RISK_ZONE_LABELS[healthRiskZone] ?? healthRiskZone}<br/>
+              <small style="font-weight:500;opacity:.9;">AQI mediu: ${Math.round(avgAqi)} · PM2.5: ${avgPm25.toFixed(1)}</small>
+            </div>`,
+          iconSize: [200, 52],
+          iconAnchor: [100, 26],
         });
 
-        const label = L.marker([centerLat, centerLng], {
-          icon: labelIcon,
-          interactive: false,
-        }).addTo(map);
-
+        const label = L.marker([centerLat, centerLng], { icon: labelIcon, interactive: false }).addTo(map);
         clusterLayersRef.current.push(circle, label);
       });
     } else {
-      // Use original AQI-based clustering (6 zones)
-      const clusters = new Map<number, Sensor[]>();
-      sensors.forEach(sensor => {
-        const cluster = sensor.cluster || 0;
-        if (!clusters.has(cluster)) {
-          clusters.set(cluster, []);
-        }
-        clusters.get(cluster)!.push(sensor);
+      // Grupare pe zone urbane (prefix ID)
+      const zoneGroups = new Map<string, Sensor[]>();
+      sensors.forEach(s => {
+        const prefix = s.id.substring(0, 4);
+        if (!zoneGroups.has(prefix)) zoneGroups.set(prefix, []);
+        zoneGroups.get(prefix)!.push(s);
       });
 
-      // Draw cluster circles
-      clusters.forEach((clusterSensors, clusterId) => {
-        if (clusterSensors.length === 0) return;
-
-        // Calculate cluster center
+      zoneGroups.forEach((clusterSensors, prefix) => {
+        if (!clusterSensors.length) return;
         const centerLat = clusterSensors.reduce((sum, s) => sum + s.lat, 0) / clusterSensors.length;
         const centerLng = clusterSensors.reduce((sum, s) => sum + s.lng, 0) / clusterSensors.length;
 
-        // Calculate average AQI for cluster
-        const avgAQI = Math.round(clusterSensors.reduce((sum, s) => sum + s.aqi, 0) / clusterSensors.length);
-        const category = clusterSensors[0].category;
-        const color = AQI_COLORS[category];
+        // AQI calculat din PM2.5 real
+        const avgPm25 = clusterSensors.reduce((sum, s) => sum + (s.pm25 ?? 0), 0) / clusterSensors.length;
+        const avgAqi = avgPm25 > 0
+          ? pm25ToAqi(avgPm25)
+          : Math.round(clusterSensors.reduce((sum, s) => sum + s.aqi, 0) / clusterSensors.length);
+        const category = aqiCategory(avgAqi);
+        const color = AQI_COLORS[category] ?? AQI_COLORS['moderate'];
+        const zoneName = ZONE_NAMES[prefix] ?? prefix;
 
-        // Draw cluster circle
         const circle = L.circle([centerLat, centerLng], {
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.2,
-          radius: 1500,
-          weight: 2,
+          color, fillColor: color, fillOpacity: 0.15, radius: 1800, weight: 2,
         }).addTo(map);
 
-        // Add cluster label
         const labelIcon = L.divIcon({
           className: 'cluster-label',
           html: `
             <div style="
-              background: ${color}ee;
-              color: white;
-              padding: 6px 12px;
-              border-radius: 20px;
-              font-weight: 600;
-              font-size: 14px;
-              white-space: nowrap;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-              border: 2px solid white;
+              background:${color}ee;color:#fff;
+              padding:5px 11px;border-radius:16px;
+              font-weight:600;font-size:12px;
+              white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.35);
+              border:2px solid rgba(255,255,255,0.7);
             ">
-              Zona ${clusterId + 1} - AQI ${avgAQI}
-            </div>
-          `,
-          iconSize: [120, 30],
-          iconAnchor: [60, 15],
+              ${zoneName} · AQI ${avgAqi}
+            </div>`,
+          iconSize: [160, 28],
+          iconAnchor: [80, 14],
         });
 
-        const label = L.marker([centerLat, centerLng], {
-          icon: labelIcon,
-          interactive: false,
-        }).addTo(map);
-
+        const label = L.marker([centerLat, centerLng], { icon: labelIcon, interactive: false }).addTo(map);
         clusterLayersRef.current.push(circle, label);
       });
     }
   }, [sensors, showClustering, isMapReady, useRiskZones]);
 
-  // Add pulse animation
+  // ── Stiluri CSS ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!document.getElementById('pulse-animation')) {
+    if (!document.getElementById('map-styles')) {
       const style = document.createElement('style');
-      style.id = 'pulse-animation';
+      style.id = 'map-styles';
       style.textContent = `
         @keyframes pulse {
-          0%, 100% {
-            transform: scale(1);
-            opacity: 0.5;
-          }
-          50% {
-            transform: scale(1.3);
-            opacity: 0.2;
-          }
+          0%, 100% { transform: scale(1); opacity: 0.45; }
+          50% { transform: scale(1.4); opacity: 0.15; }
         }
-        .leaflet-container {
-          font-family: system-ui, -apple-system, sans-serif;
-        }
-        .leaflet-popup-content-wrapper {
-          background: #1e293b;
-          color: white;
-          border-radius: 12px;
-        }
-        .leaflet-popup-tip {
-          background: #1e293b;
-        }
+        .leaflet-container { font-family: system-ui, -apple-system, sans-serif; }
+        .leaflet-popup-content-wrapper { background: #1e293b; color: white; border-radius: 12px; }
+        .leaflet-popup-tip { background: #1e293b; }
         .leaflet-tooltip {
-          background: #1e293b;
-          color: white;
-          border: 1px solid #475569;
-          border-radius: 8px;
-          padding: 8px 12px;
-          font-size: 13px;
+          background: #0f172a !important;
+          color: white !important;
+          border: 1px solid #334155 !important;
+          border-radius: 10px !important;
+          padding: 10px 14px !important;
+          font-size: 12px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+          max-width: 240px;
         }
-        .leaflet-tooltip-top:before {
-          border-top-color: #1e293b;
-        }
+        .leaflet-tooltip-top:before { border-top-color: #0f172a !important; }
       `;
       document.head.appendChild(style);
     }
@@ -344,8 +386,7 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} className="w-full h-full rounded-lg" />
-      
-      {/* Loading overlay */}
+
       {!isMapReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
           <div className="text-center">
@@ -354,23 +395,24 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
           </div>
         </div>
       )}
-      
-      {/* Floating info card */}
+
+      {/* Counter senzori */}
       <div className="absolute bottom-6 left-6 bg-slate-900/90 backdrop-blur-lg border border-slate-700 rounded-xl p-4 text-white z-[1000]">
-        <div className="text-sm text-slate-400 mb-1">Total senzori vizibili</div>
-        <div className="text-2xl">{sensors.length}</div>
+        <div className="text-xs text-slate-400 mb-1">Total senzori activi</div>
+        <div className="text-2xl font-bold">{sensors.length}</div>
+        <div className="text-xs text-slate-500 mt-1">Date live · OpenWeather</div>
       </div>
 
-      {/* Map legend */}
+      {/* Legenda */}
       <div className="absolute top-6 right-6 bg-slate-900/90 backdrop-blur-lg border border-slate-700 rounded-xl p-4 z-[1000]">
-        <div className="text-white mb-3">Categorii AQI</div>
+        <div className="text-white text-sm font-semibold mb-3">
+          {useRiskZones ? 'Zone de Risc Sanitar' : 'Categorii AQI'}
+        </div>
         <div className="space-y-2">
           {Object.entries(useRiskZones ? RISK_ZONE_COLORS : AQI_COLORS).map(([category, color]) => (
-            <div key={category} className="flex items-center gap-3 text-sm">
-              <div 
-                className="w-4 h-4 rounded-full border-2 border-white shadow-md" 
-                style={{ backgroundColor: color }}
-              />
+            <div key={category} className="flex items-center gap-2 text-xs">
+              <div className="w-3 h-3 rounded-full border border-white/30 shadow-sm flex-shrink-0"
+                   style={{ backgroundColor: color }} />
               <span className="text-slate-300 whitespace-nowrap">
                 {useRiskZones ? RISK_ZONE_LABELS[category as keyof typeof RISK_ZONE_LABELS] : AQI_LABELS[category as keyof typeof AQI_LABELS]}
               </span>

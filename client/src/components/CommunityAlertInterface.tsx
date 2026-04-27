@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Clock, AlertTriangle, Menu, LogOut, Camera, MapPinned, FileText, ClipboardList, Upload, Send, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { MapPin, Clock, AlertTriangle, Menu, LogOut, Camera, MapPinned, FileText, ClipboardList, Upload, Send, CheckCircle2, Image as ImageIcon, Trophy } from 'lucide-react';
 import type { User } from '../types';
 
 interface CommunityAlertInterfaceProps {
   user: User;
-  onNavigate: (view: 'map' | 'history' | 'alerts') => void;
+  onNavigate: (view: 'map' | 'history' | 'alerts' | 'leaderboard') => void;
   onLogout: () => void;
 }
 
@@ -48,29 +48,81 @@ export function CommunityAlertInterface({ user, onNavigate, onLogout }: Communit
     additionalNotes: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      // Reset forms
-      setTextReport('');
-      setLocation('');
-      setPhotoFile(null);
-      setPhotoDescription('');
-      setPhotoLocation({ lat: '', lng: '' });
-      setGeojsonFile(null);
-      setGeojsonDescription('');
-      setQuestionnaire({
-        airQuality: '',
-        visibility: '',
-        smell: '',
-        symptoms: '',
-        sources: [],
-        additionalNotes: '',
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let titlu = '';
+      let continut = '';
+
+      if (selectedType === 'text') {
+        titlu = `Raport text - ${location}`;
+        continut = textReport;
+      } else if (selectedType === 'photo') {
+        titlu = `Fotografie geo-tagged - ${photoLocation.lat}, ${photoLocation.lng}`;
+        continut = photoDescription + (photoFile ? ` | Fisier: ${photoFile.name}` : '');
+      } else if (selectedType === 'geojson') {
+        titlu = `Date GeoJSON`;
+        continut = geojsonDescription + (geojsonFile ? ` | Fisier: ${geojsonFile.name}` : '');
+      } else if (selectedType === 'questionnaire') {
+        titlu = `Chestionar calitate aer`;
+        continut = [
+          `Calitate aer: ${questionnaire.airQuality}`,
+          `Vizibilitate: ${questionnaire.visibility}`,
+          `Miros: ${questionnaire.smell}`,
+          `Simptome: ${questionnaire.symptoms}`,
+          `Surse: ${questionnaire.sources.join(', ')}`,
+          `Note: ${questionnaire.additionalNotes}`,
+        ].filter(l => !l.endsWith(': ')).join(' | ');
+      }
+
+      const tipMap: Record<string, string> = {
+        text: 'TEXT',
+        photo: 'FOTO',
+        geojson: 'GEO_JSON',
+        questionnaire: 'CHESTIONAR',
+      };
+
+      await fetch('http://localhost:8080/api/rapoarte', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          titlu,
+          tip: tipMap[selectedType],
+          continut,
+          dataEmitere: new Date().toISOString(),
+          membruId: user.id || null,
+        }),
       });
-    }, 3000);
+
+      setSubmitted(true);
+      setTimeout(() => {
+        setSubmitted(false);
+        setTextReport('');
+        setLocation('');
+        setPhotoFile(null);
+        setPhotoDescription('');
+        setPhotoLocation({ lat: '', lng: '' });
+        setGeojsonFile(null);
+        setGeojsonDescription('');
+        setQuestionnaire({
+          airQuality: '', visibility: '', smell: '',
+          symptoms: '', sources: [], additionalNotes: '',
+        });
+      }, 3000);
+    } catch (err) {
+      setError('Eroare la trimiterea raportului. Încearcă din nou.');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
 
   const alertTypes = [
     {
@@ -137,31 +189,39 @@ export function CommunityAlertInterface({ user, onNavigate, onLogout }: Communit
   return (
     <div className="h-screen flex flex-col bg-slate-950">
       {/* Top Navigation */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between z-20">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="text-slate-400 hover:text-white transition-colors"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-          <h1 className="text-2xl text-white">
-            AirWatch <span className="text-cyan-400">București</span>
-          </h1>
-          <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg px-4 py-2">
-            <span className="text-orange-400">Alerte Comunitate</span>
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-700 px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-center justify-between z-40 gap-3 md:gap-0">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h1 className="text-xl md:text-2xl text-white">
+              AirWatch <span className="text-cyan-400">București</span>
+            </h1>
+            <div className="hidden md:block bg-orange-500/20 border border-orange-500/30 rounded-lg px-4 py-2">
+              <span className="text-orange-400">Alerte Comunitate</span>
+            </div>
           </div>
+          <button
+            onClick={onLogout}
+            className="md:hidden flex items-center gap-2 text-red-400 px-2 py-1 rounded-lg"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between w-full md:w-auto gap-4">
           {user.name && (
-            <div className="text-slate-300">
-              <span className="text-purple-400">{user.name}</span>
+            <div className="text-slate-300 text-sm md:text-base truncate max-w-[150px] md:max-w-none">
+              <span className="hidden md:inline">Bine ai venit, </span><span className="text-purple-400">{user.name}</span>
             </div>
           )}
           <button
             onClick={onLogout}
-            className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 px-4 py-2 rounded-lg transition-colors"
+            className="hidden md:flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 px-4 py-2 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Ieșire</span>
@@ -177,7 +237,7 @@ export function CommunityAlertInterface({ user, onNavigate, onLogout }: Communit
               initial={{ x: -320 }}
               animate={{ x: 0 }}
               exit={{ x: -320 }}
-              className="w-80 bg-slate-900 border-r border-slate-700 flex flex-col z-10 overflow-hidden"
+              className="absolute md:relative w-80 h-full bg-slate-900 border-r border-slate-700 flex flex-col z-30 shadow-2xl overflow-hidden"
             >
               {/* Navigation */}
               <div className="p-4 border-b border-slate-700 flex-shrink-0">
@@ -202,6 +262,13 @@ export function CommunityAlertInterface({ user, onNavigate, onLogout }: Communit
                   >
                     <AlertTriangle className="w-5 h-5" />
                     <span>Alerte Comunitate</span>
+                  </button>
+                  <button
+                    onClick={() => onNavigate('leaderboard')}
+                    className="w-full flex items-center gap-3 hover:bg-slate-800 text-slate-300 hover:text-white px-4 py-3 rounded-xl transition-colors"
+                  >
+                    <Trophy className="w-5 h-5 text-yellow-500" />
+                    <span>Top Implicare</span>
                   </button>
                 </nav>
               </div>
@@ -288,6 +355,14 @@ export function CommunityAlertInterface({ user, onNavigate, onLogout }: Communit
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                 >
+                  {/* Eroare API */}
+                  {error && (
+                    <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      {error}
+                    </div>
+                  )}
+
                   {/* Text Report Form */}
                   {selectedType === 'text' && (
                     <form onSubmit={handleSubmit} className="space-y-6">

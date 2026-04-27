@@ -12,11 +12,11 @@ export function IntroAnimation({ onComplete }: IntroAnimationProps) {
     const audio = new Audio('/freesounds123-wind-sound-379042.mp3'); 
     audio.volume = 0.5; 
     
-    // Browserele pot bloca autoplay-ul, folosim un catch
+    // Browserele pot bloca autoplay-ul, folosim un catch fara log
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((error) => {
-        console.log("Autoplay a fost blocat de browser (normal la prima încărcare):", error);
+        // Ignoram eroarea silentios pentru ca browserul blocheaza autoplay-ul
       });
     }
 

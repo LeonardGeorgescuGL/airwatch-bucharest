@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, User } from 'lucide-react';
+import { api } from '../api/api';
 
 interface LoginModalProps {
-  onLogin: (name: string, email: string, password: string) => void;
+  onLogin: (id: string, name: string, email: string, points: number, neighborhood: string) => void;
   onClose: () => void;
 }
 
@@ -14,58 +15,58 @@ export function LoginModal({ onLogin, onClose }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMessage(null);
+    setLoading(true);
 
     if (mode === 'register') {
-      // simple client-side registration saved to localStorage
       if (!name || !email || !password) {
         setError('Completează toate câmpurile pentru crearea contului.');
+        setLoading(false);
         return;
       }
-
       try {
-        const raw = localStorage.getItem('aw_users');
-        const users: Array<{ name: string; email: string; password: string }> = raw ? JSON.parse(raw) : [];
-        if (users.find((u) => u.email === email)) {
-          setError('Există deja un cont cu acest email.');
-          return;
-        }
-
-        users.push({ name, email, password });
-        localStorage.setItem('aw_users', JSON.stringify(users));
+        await api.register({ name, email, passwordHash: password, role: 'USER' });
         setMessage('Cont creat cu succes. Te redirecționez către autentificare...');
-
-        // switch to login view and prefill email (clear password)
         setTimeout(() => {
           setMode('login');
           setPassword('');
+          setMessage(null);
         }, 900);
       } catch (err) {
-        setError('Eroare la crearea contului. Încearcă din nou.');
+        setError('Email deja folosit sau eroare la creare cont.');
+      } finally {
+        setLoading(false);
       }
-
       return;
     }
 
-    // login
+    // LOGIN — apel backend real
     if (!email || !password) {
       setError('Completează email și parolă pentru autentificare.');
+      setLoading(false);
       return;
     }
 
-    const raw = localStorage.getItem('aw_users');
-    const users: Array<{ name: string; email: string; password: string }> = raw ? JSON.parse(raw) : [];
-    const found = users.find((u) => u.email === email && u.password === password);
-    if (!found) {
-      setError('Email sau parolă invalide. Dacă nu ai cont, creează unul.');
-      return;
+    try {
+      const userData = await api.login({ email, password });
+      // userData vine de la backend: { id, name, email, role, points, neighborhood, passwordHash }
+      onLogin(
+        userData.id,
+        userData.name,
+        userData.email,
+        userData.points ?? 0,
+        userData.neighborhood ?? ''
+      );
+    } catch (err) {
+      setError('Email sau parolă invalide.');
+    } finally {
+      setLoading(false);
     }
-
-    onLogin(found.name, found.email, found.password);
   };
 
   return (
@@ -99,21 +100,23 @@ export function LoginModal({ onLogin, onClose }: LoginModalProps) {
               <User className="w-8 h-8 text-purple-400" />
             </div>
             <h2 className="text-3xl text-white mb-2">Bun venit!</h2>
-            <p className="text-slate-400">{mode === 'login' ? 'Autentifică-te ca membru al comunității' : 'Creează un cont de membru al comunității'}</p>
+            <p className="text-slate-400">
+              {mode === 'login' ? 'Autentifică-te ca membru al comunității' : 'Creează un cont de membru al comunității'}
+            </p>
           </div>
 
           <div className="flex justify-center gap-4 mb-4">
             <button
               type="button"
               onClick={() => { setMode('login'); setError(null); setMessage(null); }}
-              className={`px-4 py-2 rounded-full ${mode === 'login' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+              className={`px-4 py-2 rounded-full transition-colors ${mode === 'login' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300'}`}
             >
               Autentificare
             </button>
             <button
               type="button"
               onClick={() => { setMode('register'); setError(null); setMessage(null); }}
-              className={`px-4 py-2 rounded-full ${mode === 'register' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+              className={`px-4 py-2 rounded-full transition-colors ${mode === 'register' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300'}`}
             >
               Creează cont
             </button>
@@ -174,9 +177,10 @@ export function LoginModal({ onLogin, onClose }: LoginModalProps) {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-4 rounded-xl transition-all"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-4 rounded-xl transition-all disabled:opacity-50"
             >
-              {mode === 'login' ? 'Autentificare' : 'Creează cont'}
+              {loading ? 'Se procesează...' : mode === 'login' ? 'Autentificare' : 'Creează cont'}
             </motion.button>
           </form>
 
