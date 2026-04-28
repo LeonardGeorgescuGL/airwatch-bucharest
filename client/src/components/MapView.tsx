@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronUp, ChevronDown, GripHorizontal } from 'lucide-react';
 import type { Sensor } from '../types';
 import { AQI_COLORS, AQI_LABELS, RISK_ZONE_COLORS, RISK_ZONE_LABELS } from '../utils/mockData';
 
@@ -15,47 +17,63 @@ declare global {
 
 // ── Mapare ID senzor → nume prietenos ──────────────────────────────────────
 const SENSOR_NAMES: Record<string, string> = {
-  'S-CV-01': 'Piața Unirii',
-  'S-CV-02': 'Calea Victoriei',
-  'S-CV-03': 'Piața Victoriei',
-  'S-CV-04': 'Piața Alba Iulia',
-  'S-CV-05': 'Bd. Magheru',
-  'S-CV-06': 'Piața Romană',
-  'S-CV-07': 'Tineretului',
-  'S-CV-08': 'Piața Sudului',
-  'S-NR-01': 'Băneasa',
-  'S-NR-02': 'Herăstrău',
-  'S-NR-03': 'Floreasca',
-  'S-NR-04': 'Aeroport Băneasa',
-  'S-NR-05': 'Dorobanți',
-  'S-NR-06': 'Pipera',
-  'S-NR-07': 'Aviatorilor',
-  'S-SD-01': 'Berceni',
-  'S-SD-02': 'Piața Progresul',
-  'S-SD-03': 'Giurgiului',
-  'S-SD-04': 'Rahova',
-  'S-SD-05': 'Olteniței',
-  'S-SD-06': 'Brâncoveanu',
-  'S-SD-07': 'Jilava (limită)',
-  'S-ES-01': 'Pantelimon',
-  'S-ES-02': 'Colentina',
-  'S-ES-03': 'Dristor',
-  'S-ES-04': 'Fundeni',
-  'S-ES-05': 'Titan Est',
-  'S-ES-06': 'Andronache',
-  'S-VS-01': 'Militari',
-  'S-VS-02': 'Drumul Taberei',
-  'S-VS-03': 'Crângași',
-  'S-VS-04': 'Gorjului',
-  'S-VS-05': 'Lujerului',
-  'S-VS-06': 'Politehnica',
-  'S-VS-07': 'Giulești',
-  'S-SE-01': 'Titan',
-  'S-SE-02': 'Dristor Nord',
-  'S-SE-03': 'Râmnicu Sărat',
-  'S-SE-04': 'Republica',
-  'S-SE-05': 'Costin Georgian',
-  'S-SE-06': 'Ilioara',
+  // Centru (18)
+  'S-CV-01': 'Piața Unirii',          'S-CV-02': 'Calea Victoriei',
+  'S-CV-03': 'Piața Victoriei',       'S-CV-04': 'Piața Alba Iulia',
+  'S-CV-05': 'Bd. Magheru',           'S-CV-06': 'Piața Romană',
+  'S-CV-07': 'Tineretului',           'S-CV-08': 'Piața Sudului',
+  'S-CV-09': 'Bd. Unirii (vest)',     'S-CV-10': 'Izvor',
+  'S-CV-11': 'Operă',                 'S-CV-12': 'Universitate',
+  'S-CV-13': 'Sf. Gheorghe',          'S-CV-14': 'Cișmigiu',
+  'S-CV-15': 'Bd. Carol I',           'S-CV-16': 'Obor',
+  'S-CV-17': 'Piața Rosetti',         'S-CV-18': 'Piața Kogălniceanu',
+  // Nord (17)
+  'S-NR-01': 'Băneasa',               'S-NR-02': 'Herăstrău',
+  'S-NR-03': 'Floreasca',             'S-NR-04': 'Aeroport Băneasa',
+  'S-NR-05': 'Dorobanți',             'S-NR-06': 'Pipera',
+  'S-NR-07': 'Aviatorilor',           'S-NR-08': 'Bd. Prezan',
+  'S-NR-09': 'Băneasa Sud',           'S-NR-10': 'Otopeni (limită)',
+  'S-NR-11': 'Aurel Vlaicu',          'S-NR-12': 'Promenada',
+  'S-NR-13': 'Corbeanca (limită)',    'S-NR-14': 'Calea Floreasca',
+  'S-NR-15': 'Voluntari (limită)',    'S-NR-16': 'Jandarmeriei',
+  'S-NR-17': 'Bd. Aerogării',
+  // Sud (17)
+  'S-SD-01': 'Berceni',               'S-SD-02': 'Piața Progresul',
+  'S-SD-03': 'Giurgiului',            'S-SD-04': 'Rahova',
+  'S-SD-05': 'Olteniței',             'S-SD-06': 'Brâncoveanu',
+  'S-SD-07': 'Jilava (limită)',       'S-SD-08': 'Piața Resita',
+  'S-SD-09': 'Bd. Metalurgiei',       'S-SD-10': 'Văcărești',
+  'S-SD-11': 'Berceni Sud',           'S-SD-12': 'Calea Giurgiului',
+  'S-SD-13': 'Popești-Leordeni',      'S-SD-14': 'Bd. Ferentari',
+  'S-SD-15': 'Pieptănari',            'S-SD-16': 'Bd. Covasna',
+  'S-SD-17': 'Piața Sudului Est',
+  // Est (16)
+  'S-ES-01': 'Pantelimon',            'S-ES-02': 'Colentina',
+  'S-ES-03': 'Dristor',               'S-ES-04': 'Fundeni',
+  'S-ES-05': 'Titan Est',             'S-ES-06': 'Andronache',
+  'S-ES-07': 'Bd. Camil Ressu',       'S-ES-08': 'Iancului',
+  'S-ES-09': 'Baraj Pantelimon',      'S-ES-10': 'Bd. Cheile Turzii',
+  'S-ES-11': 'Voluntari Est',         'S-ES-12': 'Colentina Sud',
+  'S-ES-13': 'Ștefan cel Mare',       'S-ES-14': 'Piața Muncii',
+  'S-ES-15': 'Bd. Basarabia',         'S-ES-16': 'Cernavodă',
+  // Vest (16)
+  'S-VS-01': 'Militari',              'S-VS-02': 'Drumul Taberei',
+  'S-VS-03': 'Crângași',              'S-VS-04': 'Gorjului',
+  'S-VS-05': 'Lujerului',             'S-VS-06': 'Politehnica',
+  'S-VS-07': 'Giulești',              'S-VS-08': 'Bd. Timișoara',
+  'S-VS-09': 'Chiajna (limită)',      'S-VS-10': 'Bd. Geniului',
+  'S-VS-11': 'Lacul Morii',           'S-VS-12': 'Militari Shopping',
+  'S-VS-13': 'Piața Moghioroș',       'S-VS-14': 'Apusului',
+  'S-VS-15': 'Bd. Virtuții',          'S-VS-16': 'Bd. Uverturii',
+  // Sud-Est (16)
+  'S-SE-01': 'Titan',                 'S-SE-02': 'Dristor Nord',
+  'S-SE-03': 'Piața Râmnicu Sărat',   'S-SE-04': 'Republica',
+  'S-SE-05': 'Costin Georgian',       'S-SE-06': 'Ilioara',
+  'S-SE-07': 'Piața Muncii Sud',      'S-SE-08': 'Bd. Liviu Rebreanu',
+  'S-SE-09': 'Balta Albă',            'S-SE-10': 'Piața Delfinului',
+  'S-SE-11': 'Piața Vyborg',          'S-SE-12': 'Bd. Nicolae Grigorescu',
+  'S-SE-13': 'Piața Izvorul Rece',    'S-SE-14': 'Dristor 2',
+  'S-SE-15': 'Piața Budești',         'S-SE-16': 'Bd. Decebal',
 };
 
 // Zona urbana pentru fiecare prefix de senzor
@@ -113,6 +131,7 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
   const markersRef = useRef<any[]>([]);
   const clusterLayersRef = useRef<any[]>([]);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isLegendOpen, setIsLegendOpen] = useState(true);
 
   useEffect(() => {
     if (!document.getElementById('leaflet-css')) {
@@ -403,23 +422,55 @@ export function MapView({ sensors, showClustering, onSensorClick, useRiskZones }
         <div className="text-xs text-slate-500 mt-1">Date live · OpenWeather</div>
       </div>
 
-      {/* Legenda */}
-      <div className="absolute top-6 right-6 bg-slate-900/90 backdrop-blur-lg border border-slate-700 rounded-xl p-4 z-[1000]">
-        <div className="text-white text-sm font-semibold mb-3">
-          {useRiskZones ? 'Zone de Risc Sanitar' : 'Categorii AQI'}
+      {/* Legenda Draggable */}
+      <motion.div
+        drag
+        dragMomentum={false}
+        dragConstraints={mapRef}
+        className="absolute top-6 right-6 bg-slate-900/95 backdrop-blur-lg border border-slate-700 rounded-xl z-[1000] overflow-hidden shadow-2xl cursor-grab active:cursor-grabbing"
+        style={{ touchAction: 'none' }}
+      >
+        <div 
+          className="bg-slate-800/80 p-2 flex items-center justify-between border-b border-slate-700/50"
+        >
+          <GripHorizontal className="w-4 h-4 text-slate-500 mr-4" />
+          <button 
+            onClick={(e) => { e.stopPropagation(); setIsLegendOpen(!isLegendOpen); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-700 transition-colors"
+          >
+            {isLegendOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
         </div>
-        <div className="space-y-2">
-          {Object.entries(useRiskZones ? RISK_ZONE_COLORS : AQI_COLORS).map(([category, color]) => (
-            <div key={category} className="flex items-center gap-2 text-xs">
-              <div className="w-3 h-3 rounded-full border border-white/30 shadow-sm flex-shrink-0"
-                   style={{ backgroundColor: color }} />
-              <span className="text-slate-300 whitespace-nowrap">
-                {useRiskZones ? RISK_ZONE_LABELS[category as keyof typeof RISK_ZONE_LABELS] : AQI_LABELS[category as keyof typeof AQI_LABELS]}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+        
+        <AnimatePresence initial={false}>
+          {isLegendOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="p-4 pointer-events-none">
+                <div className="text-white text-sm font-semibold mb-3">
+                  {useRiskZones ? 'Zone de Risc Sanitar' : 'Categorii AQI'}
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(useRiskZones ? RISK_ZONE_COLORS : AQI_COLORS).map(([category, color]) => (
+                    <div key={category} className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 rounded-full border border-white/30 shadow-sm flex-shrink-0"
+                           style={{ backgroundColor: color }} />
+                      <span className="text-slate-300 whitespace-nowrap">
+                        {useRiskZones ? RISK_ZONE_LABELS[category as keyof typeof RISK_ZONE_LABELS] : AQI_LABELS[category as keyof typeof AQI_LABELS]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
