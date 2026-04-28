@@ -5,7 +5,7 @@
 -- ============================================================
 
 -- Sterge senzorii existenti si reinserteaza toti 100
-DELETE FROM MASURATORI WHERE sensor_id LIKE 'S-%';
+DELETE FROM MASURATORI WHERE id_senzor LIKE 'S-%';
 DELETE FROM SENZOR;
 
 -- ── ZONA CENTRU (id_zona=2) — 18 senzori ────────────────────

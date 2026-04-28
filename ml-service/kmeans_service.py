@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -24,7 +24,7 @@ class SensorData(BaseModel):
     co: float
     so2: float
     dataSource: str
-    cluster: int
+    cluster: Optional[int] = None
 
 class SensorResponse(SensorData):
     healthRiskZone: str
