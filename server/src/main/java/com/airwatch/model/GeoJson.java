@@ -1,6 +1,5 @@
 package com.airwatch.model;
 
-import com.airwatch.config.JsonbConverter;
 import jakarta.persistence.*;
 
 @Entity
