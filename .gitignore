@@ -1,6 +1,44 @@
+# ========================
+# Node.js / Frontend
+# ========================
 node_modules/
+dist/
+
+# ========================
+# IDE / Editor
+# ========================
 .vscode/
+.idea/
+
+# ========================
+# Variabile de mediu (secrete)
+# ========================
 .env
+*.env
+
+# ========================
+# Java / Spring Boot
+# ========================
 server/target/
 *.class
 *.jar
+
+# ========================
+# Python / ML Service
+# ========================
+ml-service/venv/
+ml-service/.venv/
+venv/
+.venv/
+__pycache__/
+ml-service/__pycache__/
+ml-service/routers/__pycache__/
+*.py[cod]
+*.pyo
+
+# ========================
+# Fisiere temporare / OS
+# ========================
+*.log
+.DS_Store
+Thumbs.db
