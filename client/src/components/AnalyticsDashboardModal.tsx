@@ -58,7 +58,7 @@ export function AnalyticsDashboardModal({ onClose }: AnalyticsDashboardModalProp
       >
         <div className="sticky top-0 bg-slate-900/90 backdrop-blur border-b border-slate-700 p-6 flex items-center justify-between z-10">
           <h2 className="text-2xl text-white font-semibold">
-            📊 Analitici Comunitate <span className="text-cyan-400">AirWatch</span>
+            Analitici Comunitate <span className="text-cyan-400">AirWatch</span>
           </h2>
           <button
             onClick={onClose}

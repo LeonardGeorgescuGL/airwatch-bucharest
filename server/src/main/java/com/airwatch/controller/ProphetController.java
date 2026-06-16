@@ -54,8 +54,8 @@ public class ProphetController {
             @PathVariable String indicator,
             @PathVariable Integer days) {
 
-        // luam masuratorile din ultimele 30 de zile pentru zona respectiva
-        LocalDateTime deLa = LocalDateTime.now().minusDays(30);
+        // luam masuratorile din ultimele 90 de zile pentru a avea mai multe date istorice
+        LocalDateTime deLa = LocalDateTime.now().minusDays(90);
         List<Masuratori> masuratori = masuratoriRepo.findByZonaAndTimestamp(idZona, deLa);
 
         if (masuratori.size() < 14) {
@@ -64,8 +64,9 @@ public class ProphetController {
                             + ". Minim 14 inregistrari necesare, exista " + masuratori.size()));
         }
 
-        // construim seria de timp in formatul asteptat de Prophet: { ds: timestamp, y: valoare }
-        List<Map<String, Object>> prophetData = new ArrayList<>();
+        // agregam masuratorile per timestamp (media tuturor senzorilor din zona)
+        // astfel obtinem o serie de timp curata, fara duplicate
+        Map<String, List<Double>> valuesByTimestamp = new LinkedHashMap<>();
         int countZero = 0;
         for (Masuratori m : masuratori) {
             double val = extractIndicator(m, indicator);
@@ -73,20 +74,30 @@ public class ProphetController {
                 countZero++;
                 continue;
             }
+            String ts = m.getTimestamp().format(ISO_FMT);
+            valuesByTimestamp.computeIfAbsent(ts, k -> new ArrayList<>()).add(val);
+        }
+
+        // calculam media per timestamp si construim seria Prophet
+        List<Map<String, Object>> prophetData = new ArrayList<>();
+        for (Map.Entry<String, List<Double>> entry : valuesByTimestamp.entrySet()) {
+            List<Double> vals = entry.getValue();
+            double avg = vals.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            if (avg <= 0) continue;
             Map<String, Object> point = new LinkedHashMap<>();
-            point.put("ds", m.getTimestamp().format(ISO_FMT));
-            point.put("y", val);
+            point.put("ds", entry.getKey());
+            point.put("y", Math.round(avg * 100.0) / 100.0);
             prophetData.add(point);
         }
 
         System.out.println("Prophet debug: Zona=" + idZona + ", Indicator=" + indicator
-                + ", Total=" + masuratori.size() + ", Valide=" + prophetData.size() + ", Zero/Null=" + countZero);
+                + ", Total=" + masuratori.size() + ", Timestamps unice=" + prophetData.size() + ", Zero/Null=" + countZero);
 
         // verificam ca avem destule valori nenule pentru indicatorul ales
         if (prophetData.size() < 14) {
             return ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE)
-                    .body(Map.of("error", "Date insuficiente (" + prophetData.size() + " valide din "
-                            + masuratori.size() + "). Indicatorul '" + indicator + "' pare sa aiba valori 0 sau null in DB."));
+                    .body(Map.of("error", "Date insuficiente (" + prophetData.size() + " puncte unice din "
+                            + masuratori.size() + " masuratori). Indicatorul '" + indicator + "' necesita minim 14 timestamps unice."));
         }
 
         Map<String, Object> requestBody = new LinkedHashMap<>();

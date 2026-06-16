@@ -18,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include the endpoints from the split files
+# Endpoints pentru fiecare serviciu
 app.include_router(kmeans_router, tags=["Clustering"])
 app.include_router(prophet_router, tags=["Forecasting"])
 
